@@ -1,0 +1,15 @@
+name: video_processing
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - psycopg2
+  - boto3
+  - tqdm
+  - numpy
+  - opencv
+  - scikit-learn
+  - pip
+  - pip:
+      - confluent-kafka
