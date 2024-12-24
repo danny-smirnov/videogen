@@ -1,6 +1,6 @@
 ./__pycache__/
-    minio_data/
-postgres_data/
+./minio_data/
+./postgres_data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
