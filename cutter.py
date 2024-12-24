@@ -1,10 +1,3 @@
-# from sklearn.cluster import DBSCAN
-import cv2
-from tqdm import tqdm
-import numpy as np
-from math import ceil
-import os
-
 import os
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/opt/homebrew/bin/ffmpeg"
 
@@ -14,9 +7,8 @@ import cv2
 from tqdm import tqdm
 import numpy as np
 from math import ceil
-import os
+
 from moviepy.tools import subprocess_call
-from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 
 
 def _get_outliers_of_interval(brightness_differencies: np.array, eps, min_samples):
