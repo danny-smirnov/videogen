@@ -1,26 +1,29 @@
 from confluent_kafka.admin import AdminClient, NewTopic
 from dotenv import load_dotenv
+import os
+
+# Загрузка переменных окружения из .env файла (если используется)
 load_dotenv()
 
 def create_topic_if_not_exists(broker, topic_name, num_partitions=1, replication_factor=1):
     """
-    Creates a Kafka topic if it does not exist.
+    Создаёт Kafka топик, если он не существует.
 
-    :param broker: Kafka broker string (e.g., 'localhost:9092').
-    :param topic_name: The name of the topic to create.
-    :param num_partitions: Number of partitions for the topic.
-    :param replication_factor: Replication factor for the topic.
+    :param broker: Строка подключения к Kafka (например, 'localhost:9092').
+    :param topic_name: Имя топика для создания.
+    :param num_partitions: Количество разделов для топика.
+    :param replication_factor: Фактор репликации для топика.
     """
     admin_client = AdminClient({'bootstrap.servers': broker})
 
-    # Fetch existing topics
+    # Получение существующих топиков
     existing_topics = admin_client.list_topics(timeout=5).topics
 
     if topic_name in existing_topics:
-        print(f"Topic '{topic_name}' already exists.")
+        print(f"Топик '{topic_name}' уже существует.")
         return
 
-    # Create the topic
+    # Создание топика
     new_topic = NewTopic(
         topic=topic_name,
         num_partitions=num_partitions,
@@ -28,22 +31,30 @@ def create_topic_if_not_exists(broker, topic_name, num_partitions=1, replication
     )
 
     try:
-        # AdminClient.create_topics() returns a future per topic
+        # AdminClient.create_topics() возвращает future для каждого топика
         futures = admin_client.create_topics([new_topic])
         for topic, future in futures.items():
             try:
-                future.result()  # Wait for operation to finish
-                print(f"Topic '{topic}' created successfully.")
+                future.result()  # Ожидание завершения операции
+                print(f"Топик '{topic}' успешно создан.")
             except Exception as e:
-                print(f"Failed to create topic '{topic}': {e}")
+                print(f"Не удалось создать топик '{topic}': {e}")
     except Exception as e:
-        print(f"Error in topic creation: {e}")
+        print(f"Ошибка при создании топика: {e}")
 
-# Usage example
+# Список необходимых топиков
+required_topics = [
+    {"name": "video_download_requests", "partitions": 3, "replication_factor": 1},
+    {"name": "video_cut_requests", "partitions": 3, "replication_factor": 1}
+]
+
+# Пример использования
 if __name__ == "__main__":
-    create_topic_if_not_exists(
-        broker="localhost:9092",
-        topic_name="video_processing",
-        num_partitions=3,
-        replication_factor=1
-    )
+    broker = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    for topic in required_topics:
+        create_topic_if_not_exists(
+            broker=broker,
+            topic_name=topic["name"],
+            num_partitions=topic["partitions"],
+            replication_factor=topic["replication_factor"]
+        )

@@ -23,14 +23,14 @@ POSTGRES_DB = "mydb"
 POSTGRES_USER = "myuser"
 POSTGRES_PASS = "mypass"
 
-TEMP_DIR = "./tmp/downloader"
+TEMP_DIR = os.path.expanduser("~/downloader")  # Изменено на абсолютный путь
 
 S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "minioadmin")
 S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "minioadmin")
 
 # ========= Логирование =========
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO,  # Можно изменить на DEBUG для более подробных логов
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler()
@@ -80,8 +80,10 @@ def init_db():
 def download_video(video_id):
     """Скачиваем ролик с YouTube (yt-dlp) в локальную папку и возвращаем путь к файлу."""
     logger.info(f"[DOWNLOAD_VIDEO] Начало скачивания видео: {video_id}")
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    output_template = os.path.join(TEMP_DIR, f"{video_id}.%(ext)s")
+    absolute_temp_dir = os.path.abspath(TEMP_DIR)
+    logger.info(f"[DOWNLOAD_VIDEO] Используем абсолютный путь: {absolute_temp_dir}")
+    os.makedirs(absolute_temp_dir, exist_ok=True)
+    output_template = os.path.join(absolute_temp_dir, f"{video_id}.%(ext)s")
 
     cmd = [
         "yt-dlp",
@@ -96,16 +98,14 @@ def download_video(video_id):
         logger.error(f"[DOWNLOAD_VIDEO] Ошибка скачивания видео {video_id}: {e.stderr}")
         raise
 
-    # Parse stdout to find the downloaded file
-    for line in result.stdout.splitlines():
-        if "[download] Destination:" in line:
-            path = line.split("Destination: ")[1].strip()
-            if os.path.exists(path):
-                logger.info(f"[DOWNLOAD_VIDEO] Файл найден: {path}")
-                return path
-
-    logger.error("[DOWNLOAD_VIDEO] yt-dlp: выходной файл не найден")
-    raise FileNotFoundError("yt-dlp: выходной файл не найден")
+    # Предполагаем, что расширение видео - mp4
+    local_path = os.path.join(absolute_temp_dir, f"{video_id}.mp4")
+    if os.path.exists(local_path):
+        logger.info(f"[DOWNLOAD_VIDEO] Файл найден: {local_path}")
+        return local_path
+    else:
+        logger.error("[DOWNLOAD_VIDEO] yt-dlp: выходной файл не найден")
+        raise FileNotFoundError("yt-dlp: выходной файл не найден")
 
 
 # ========= Загрузка в S3 =========
@@ -115,7 +115,9 @@ def upload_to_s3(local_path, channel_id, video_id):
         "s3",
         endpoint_url=S3_ENDPOINT_URL,
         aws_access_key_id=S3_ACCESS_KEY,
-        aws_secret_access_key=S3_SECRET_KEY
+        aws_secret_access_key=S3_SECRET_KEY,
+        use_ssl=False,         # Добавлено для MinIO без SSL
+        verify=False           # Добавлено для MinIO без SSL
     )
     basename = os.path.basename(local_path)
     s3_key = f"raw_videos/{channel_id}/{video_id}/{basename}"
@@ -136,7 +138,7 @@ def delivery_report(err, msg):
         logger.info(f"[KAFKA_PRODUCER] Сообщение доставлено в {msg.topic()} [{msg.partition()}]")
 
 # ========= Обработка Запроса на Загрузку =========
-def process_download_request(message_value):
+def process_download_request(message_value, consumer):
     try:
         data = json.loads(message_value)
         video_id = data["video_id"]
@@ -145,7 +147,20 @@ def process_download_request(message_value):
         logger.info(f"[DOWNLOADER] Получено задание: video_id={video_id}, channel_id={channel_id}")
 
         # Шаг 1: Скачать локально
-        local_path = download_video(video_id)
+        try:
+            local_path = download_video(video_id)
+        except FileNotFoundError:
+            # Если файл не найден, удалить его и попытаться скачать снова
+            logger.warning(f"[DOWNLOAD_VIDEO] Файл {video_id}.mp4 не найден. Попытка удалить и скачать снова.")
+            local_path = os.path.join(os.path.abspath(TEMP_DIR), f"{video_id}.mp4")
+            if os.path.exists(local_path):
+                try:
+                    os.remove(local_path)
+                    logger.info(f"[DOWNLOAD_VIDEO] Удалён повреждённый файл: {local_path}")
+                except Exception as e:
+                    logger.error(f"[DOWNLOAD_VIDEO] Не удалось удалить файл {local_path}: {e}")
+            # Попытка повторного скачивания
+            local_path = download_video(video_id)
 
         # Шаг 2: Залить в S3
         s3_key = upload_to_s3(local_path, channel_id, video_id)
@@ -195,6 +210,11 @@ def process_download_request(message_value):
         producer.poll(0)  # Обработка колбэков
         logger.info(f"[DOWNLOADER] Отправлено сообщение на Cutter → {NEXT_TOPIC}")
 
+        # Только после успешной обработки фиксируем смещение
+        consumer.commit(asynchronous=False)
+
+    except json.JSONDecodeError as jde:
+        logger.error(f"[DOWNLOADER] Некорректный JSON: {jde}. Сообщение: {message_value}")
     except Exception as e:
         logger.error(f"[DOWNLOADER] Ошибка при обработке задания: {e}")
         # Дополнительно можно реализовать повторные попытки или отправку в отдельный топик ошибок
@@ -217,8 +237,9 @@ def start_downloader():
 
     consumer = Consumer({
         "bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS,
-        "group.id": "downloader_group",
-        "auto.offset.reset": "earliest"
+        "group.id": "downloader_group_unique",  # Изменено на уникальное значение
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False             # Отключение автоматического коммита
     })
     consumer.subscribe([DOWNLOAD_TOPIC])
     logger.info("[DOWNLOADER] Ожидание сообщений из Kafka...")
@@ -232,8 +253,9 @@ def start_downloader():
                 logger.error(f"[DOWNLOADER] Ошибка Consumer: {msg.error()}")
                 continue
 
-            process_download_request(msg.value().decode("utf-8"))
-            consumer.commit(asynchronous=False)
+            process_download_request(msg.value().decode("utf-8"), consumer)
+    except Exception as e:
+        logger.error(f"[DOWNLOADER] Неожиданная ошибка: {e}")
     finally:
         consumer.close()
         postgres_pool.closeall()
