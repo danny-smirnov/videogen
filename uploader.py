@@ -3,6 +3,7 @@ import json
 import requests
 import psycopg2
 import boto3
+from kafka_admin import create_topic_if_not_exists
 from confluent_kafka import Consumer
 from datetime import datetime
 
@@ -118,6 +119,10 @@ def start_uploader():
         "group.id": "uploader_group",
         "auto.offset.reset": "earliest"
     })
+    create_topic_if_not_exists(
+        broker=KAFKA_BOOTSTRAP_SERVERS,
+        topic_name=UPLOAD_TOPIC
+    )
     consumer.subscribe([UPLOAD_TOPIC])
 
     print("[UPLOADER] Ожидание сообщений...")

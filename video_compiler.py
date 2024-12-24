@@ -1,10 +1,12 @@
 import os
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/opt/homebrew/bin/ffmpeg"
 
+from confluent_kafka import Consumer, Producer
 
 from dotenv import load_dotenv
 import random
 import boto3
+import json
 import cv2
 import numpy as np
 from moviepy.editor import VideoFileClip, concatenate_videoclips
@@ -65,15 +67,18 @@ def upload_video_to_s3(local_path, s3_bucket, s3_key):
     s3.upload_file(local_path, s3_bucket, s3_key)
     print(f"Uploaded {local_path} to s3://{s3_bucket}/{s3_key}")
     
-    
+
+UPLOADER_TOPIC = "video_upload_requests"
+KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
+
     
 def main():
     s3_bucket = os.environ['S3_BUCKET']
     s3_prefix = "processed/"
     output_s3_prefix = "merged_videos/"
 
-    local_folder = "./temp_videos"
-    output_video = f"./merged_video_{datetime.now().strftime('%Y-%m-%d-%H:%M')}.mp4"
+    local_folder = "/tmp/temp_videos"
+    output_video = f"/tmp/merged_video_{datetime.now().strftime('%Y-%m-%d-%H:%M')}.mp4"
 
     try:
         # Step 1: Download random videos from S3
@@ -85,6 +90,23 @@ def main():
         # Step 3: Upload merged video back to S3
         output_s3_key = os.path.join(output_s3_prefix, os.path.basename(output_video))
         upload_video_to_s3(output_video, s3_bucket, output_s3_key)
+        
+        
+        # Step 4: Send to Uploader Consumer
+
+        producer = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
+        
+        uploader_data = {
+            "final_id": random.randint(100000, 999999),
+            "video_id": random.randint(100000, 999999),
+            "s3_key": output_s3_key
+        }
+        producer.produce(
+            UPLOADER_TOPIC,
+            json.dumps(uploader_data).encode("utf-8"),
+        )
+        producer.flush()  
+
 
     finally:
         pass
