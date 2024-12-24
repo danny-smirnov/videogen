@@ -1,3 +1,5 @@
-./__pycache__
-./minio_data
-./postgres_data
+__pycache__/
+minio_data/
+postgres_data/
+.ipynb_checkpoints/
+tmp/
