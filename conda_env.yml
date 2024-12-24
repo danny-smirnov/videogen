@@ -8,8 +8,11 @@ dependencies:
   - boto3
   - tqdm
   - numpy
+  - moviepy
+  - yt-dlp
   - opencv
   - scikit-learn
+  - python-dotenv
   - pip
   - pip:
       - confluent-kafka

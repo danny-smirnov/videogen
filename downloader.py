@@ -7,6 +7,8 @@ from confluent_kafka import Consumer, Producer
 from datetime import datetime
 import logging
 from psycopg2 import pool
+from kafka_admin import create_topic_if_not_exists
+
 import signal
 import sys
 
@@ -88,11 +90,13 @@ def download_video(video_id):
     cmd = [
         "yt-dlp",
         "--output", output_template,
+        '--proxy', "socks5://ytdlp:ytdlp@147.45.134.54:1080/",
         "--retries", "10",
         f"https://www.youtube.com/watch?v={video_id}"
     ]
     try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        result = subprocess.run(cmd, check=True, 
+                                capture_output=True, text=True)
         logger.info(f"[DOWNLOAD_VIDEO] Видео скачано: {result.stdout}")
     except subprocess.CalledProcessError as e:
         logger.error(f"[DOWNLOAD_VIDEO] Ошибка скачивания видео {video_id}: {e.stderr}")
@@ -241,6 +245,12 @@ def start_downloader():
         "auto.offset.reset": "earliest",
         "enable.auto.commit": False             # Отключение автоматического коммита
     })
+    
+    create_topic_if_not_exists(
+        broker=KAFKA_BOOTSTRAP_SERVERS,
+        topic_name=DOWNLOAD_TOPIC
+    )
+    
     consumer.subscribe([DOWNLOAD_TOPIC])
     logger.info("[DOWNLOADER] Ожидание сообщений из Kafka...")
 

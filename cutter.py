@@ -11,7 +11,8 @@ from confluent_kafka import Consumer, KafkaException
 from kafka_admin import create_topic_if_not_exists
 
 from moviepy.tools import subprocess_call
-
+import json
+import boto3
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -226,7 +227,7 @@ def main():
                 create_scenes_from_video(downloaded_video, save_path)
 
                 # Upload scenes to S3
-                upload_folder_to_s3(save_path, bucket_name, f"processed/{video_id}")
+                upload_folder_to_s3(save_path, bucket_name, f"processed/")
 
             except Exception as e:
                 print(f"Error processing message: {e}")
