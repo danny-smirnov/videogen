@@ -3,3 +3,15 @@ minio_data/
 postgres_data/
 .ipynb_checkpoints/
 tmp/
+# MacOS
+.DS_Store
+
+# MinIO data
+minio_data/
+
+# PostgreSQL data
+postgres_data/
+
+# Другие временные или бинарные файлы
+*.log
+*.tmp
