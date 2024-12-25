@@ -1,9 +1,18 @@
+# kafka_admin.py
+import os
+import logging
 from confluent_kafka.admin import AdminClient, NewTopic
 from dotenv import load_dotenv
-import os
 
 # Загрузка переменных окружения из .env файла (если используется)
 load_dotenv()
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def create_topic_if_not_exists(broker, topic_name, num_partitions=1, replication_factor=1):
     """
@@ -16,11 +25,14 @@ def create_topic_if_not_exists(broker, topic_name, num_partitions=1, replication
     """
     admin_client = AdminClient({'bootstrap.servers': broker})
 
-    # Получение существующих топиков
-    existing_topics = admin_client.list_topics(timeout=5).topics
+    try:
+        existing_topics = admin_client.list_topics(timeout=10).topics
+    except Exception as e:
+        logger.error(f"Ошибка при получении списка топиков: {e}")
+        return
 
     if topic_name in existing_topics:
-        print(f"Топик '{topic_name}' уже существует.")
+        logger.info(f"Топик '{topic_name}' уже существует.")
         return
 
     # Создание топика
@@ -36,16 +48,29 @@ def create_topic_if_not_exists(broker, topic_name, num_partitions=1, replication
         for topic, future in futures.items():
             try:
                 future.result()  # Ожидание завершения операции
-                print(f"Топик '{topic}' успешно создан.")
+                logger.info(f"Топик '{topic}' успешно создан.")
             except Exception as e:
-                print(f"Не удалось создать топик '{topic}': {e}")
+                logger.error(f"Не удалось создать топик '{topic}': {e}")
     except Exception as e:
-        print(f"Ошибка при создании топика: {e}")
+        logger.error(f"Ошибка при создании топика: {e}")
 
 # Список необходимых топиков
 required_topics = [
-    {"name": "video_download_requests", "partitions": 3, "replication_factor": 1},
-    {"name": "video_cut_requests", "partitions": 3, "replication_factor": 1}
+    {
+        "name": os.getenv("KAFKA_DOWNLOAD_TOPIC", "video_download_requests"),
+        "partitions": 3,
+        "replication_factor": 3
+    },
+    {
+        "name": os.getenv("KAFKA_CUTTER_TOPIC", "video_cut_requests"),
+        "partitions": 3,
+        "replication_factor": 3
+    },
+    {
+        "name": os.getenv("KAFKA_UPLOADER_TOPIC", "video_upload_requests"),
+        "partitions": 3,
+        "replication_factor": 3
+    }
 ]
 
 # Пример использования
