@@ -5,7 +5,7 @@ import logging
 from confluent_kafka import Producer
 from dotenv import load_dotenv
 
-# Загрузка переменных окружения из .env файла (если используется)
+# Загрузка переменных окружения из .env файла
 load_dotenv()
 
 # Конфигурация
@@ -51,13 +51,13 @@ def send_cutter_message(data):
 
 if __name__ == "__main__":
     # Пример отправки тестового сообщения в Downloader
-    # send_test_message("0XaQf8AdWEg", "test_channel")
+    send_test_message("0XaQf8AdWEg", "test_channel")
 
     # Пример отправки сообщения Cutter
     data = {
         'video_id': 'UNUSUAL_memes',
         'channel_id': 'pohuy',
-        's3_key': 'raw_videos/UNUSUAL_memes.mp4'
+        's3_key': 'raw_videos/pohuy/UNUSUAL_memes.mp4'
     }
-    
+
     send_cutter_message(data)

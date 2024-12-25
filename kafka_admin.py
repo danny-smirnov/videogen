@@ -4,7 +4,7 @@ import logging
 from confluent_kafka.admin import AdminClient, NewTopic
 from dotenv import load_dotenv
 
-# Загрузка переменных окружения из .env файла (если используется)
+# Загрузка переменных окружения из .env файла
 load_dotenv()
 
 # Настройка логирования
@@ -59,17 +59,17 @@ required_topics = [
     {
         "name": os.getenv("KAFKA_DOWNLOAD_TOPIC", "video_download_requests"),
         "partitions": 3,
-        "replication_factor": 1  # Изменено на 1
+        "replication_factor": 1
     },
     {
         "name": os.getenv("KAFKA_CUTTER_TOPIC", "video_cut_requests"),
         "partitions": 3,
-        "replication_factor": 1  # Изменено на 1
+        "replication_factor": 1
     },
     {
         "name": os.getenv("KAFKA_UPLOADER_TOPIC", "video_upload_requests"),
         "partitions": 3,
-        "replication_factor": 1  # Изменено на 1
+        "replication_factor": 1
     }
 ]
 

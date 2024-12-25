@@ -5,6 +5,7 @@ import subprocess
 import logging
 import signal
 import sys
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from confluent_kafka import Consumer, Producer
@@ -13,7 +14,7 @@ import psycopg2
 from psycopg2 import pool
 import boto3
 
-# Загрузка переменных окружения из .env файла (если используется)
+# Загрузка переменных окружения из .env файла
 load_dotenv()
 
 # ========= Настройки =========
@@ -29,7 +30,7 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "mydb")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "myuser")
 POSTGRES_PASS = os.getenv("POSTGRES_PASS", "mypass")
 
-TEMP_DIR = os.path.expanduser(os.getenv("TEMP_DIR", "~/downloader"))  # Изменено на абсолютный путь
+TEMP_DIR = os.path.expanduser(os.getenv("TEMP_DIR", "~/downloader"))
 
 YTDLP_PROXY = os.getenv("YTDLP_PROXY", "socks5://ytdlp:ytdlp@147.45.134.54:1080/")
 
@@ -38,7 +39,7 @@ S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "minioadmin")
 
 # ========= Логирование =========
 logging.basicConfig(
-    level=logging.INFO,  # Можно изменить на DEBUG для более подробных логов
+    level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler()
@@ -47,18 +48,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ========= Пул Подключений к PostgreSQL =========
-try:
-    postgres_pool = psycopg2.pool.SimpleConnectionPool(
-        1, 20,
-        host=POSTGRES_HOST,
-        dbname=POSTGRES_DB,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASS
-    )
-    logger.info("Пул подключений к PostgreSQL инициализирован.")
-except Exception as e:
-    logger.error(f"Не удалось инициализировать пул подключений к PostgreSQL: {e}")
+def initialize_postgres_pool(retries=5, delay=5):
+    """Инициализирует пул подключений к PostgreSQL с повторными попытками."""
+    attempt = 0
+    while attempt < retries:
+        try:
+            postgres_pool = psycopg2.pool.SimpleConnectionPool(
+                1, 20,
+                host=POSTGRES_HOST,
+                dbname=POSTGRES_DB,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASS
+            )
+            logger.info("Пул подключений к PostgreSQL инициализирован.")
+            return postgres_pool
+        except Exception as e:
+            attempt += 1
+            logger.error(f"Попытка {attempt} - Не удалось инициализировать пул подключений к PostgreSQL: {e}")
+            time.sleep(delay)
+    logger.critical("Не удалось установить соединение с PostgreSQL после нескольких попыток.")
     sys.exit(1)
+
+postgres_pool = initialize_postgres_pool()
 
 def get_postgres_conn():
     """Получаем соединение из пула."""
@@ -275,14 +286,14 @@ def start_downloader():
         broker=KAFKA_BOOTSTRAP_SERVERS,
         topic_name=DOWNLOAD_TOPIC,
         num_partitions=3,
-        replication_factor=3
+        replication_factor=1
     )
     
     create_topic_if_not_exists(
         broker=KAFKA_BOOTSTRAP_SERVERS,
         topic_name=NEXT_TOPIC,
         num_partitions=3,
-        replication_factor=3
+        replication_factor=1
     )
     
     consumer.subscribe([DOWNLOAD_TOPIC])
